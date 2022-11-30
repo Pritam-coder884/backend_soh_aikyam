@@ -1,62 +1,67 @@
 require("dotenv").config();
 const express=require("express");
 const app=express();
+const http = require("http").Server(app);
 const cors = require('cors');
 
-const {userRoute}=require('./routes');
+const {studentRoute}=require('./src/routes');
+const {alumniRoute}=require("./src/routes");
 
 
-const mongodbConnection=require("./db");
+const mongodbConnection=require("./src/db");
 mongodbConnection();
 
 
-const authTokenVerifyMiddleware=(req,res,next)=>{
-    const admin=require("firebase-admin");
-    let firebaseApp=null;
-    const serviceAccount=require("./firebaseAdmin.json");
-    if(!firebaseApp){
-        firebaseApp=admin.initializeApp({
-            credential:admin.credential.cert(serviceAccount)
-        });
-    }
-
-    const tokenString=req.headers['authorization'] ? req.headers['authorization'].split(" ") : null
-
-    if(!tokenString){
-        res.send("No header Provided");
-    }
-    else if(!tokenString[1]){
-        res.send("No token Provided");
-    }
-    else{
-        const {getAuth}=require("firebase-admin/auth");
-        getAuth()
-        .verifyIdToken(tokenString[1])
-        .then((decodedToken)=>{
-            const uid=decodedToken.uid;
-            console.log(uid);
-            next()
-        })
-        .catch((error)=>{
-            res.send(error);
-        })
-    }
-    // console.log(tokenString);
-}
-
-app.get("/api",authTokenVerifyMiddleware,(req,res)=>{
-    res.send("server response");
-})
 
 app.use(cors())
 app.use(express.json())
 
 
+// socket IO code
+const socketIO = require('socket.io')(http, {
+    cors: {
+        origin:'*',
+    }
+});
+
+let users = [];
+
+socketIO.on('connection', (socket) => {
+  console.log(`⚡: ${socket.id} user just connected!`);
+  socket.on('message', (data) => {
+    socketIO.emit('messageResponse', data);
+  });
+
+  socket.on('typing', (data) => socket.broadcast.emit('typingResponse', data));
+
+  //Listens when a new user joins the server
+  socket.on('newUser', (data) => {
+    //Adds the new user to the list of users
+    users.push(data);
+    // console.log(users);
+    //Sends the list of users to the client
+    socketIO.emit('newUserResponse', users);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('🔥: A user disconnected');
+    //Updates the list of users when a user disconnects from the server
+    users = users.filter((user) => user.socketID !== socket.id);
+    // console.log(users);
+    //Sends the list of users to the client
+    socketIO.emit('newUserResponse', users);
+    socket.disconnect();
+  });
+});
 
 
+app.use('/',studentRoute);
+app.use("/",alumniRoute);
 
 
-app.use('/',userRoute);
+app.get("/api",(req,res)=>{
+    res.send("server response");
+})
 
 const port=process.env.PORT || 7070
 app.listen(port,(req,res)=>{
