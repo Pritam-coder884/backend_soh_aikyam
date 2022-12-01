@@ -18,8 +18,23 @@ const getAllAlumni=async(req,res)=>{
         res.status(500).send({message:"internal server error"});
     }
 }
+const searchAlumni = async (req, res) => {
+    try{
+        const keyword = req.query.search ? {
+            $or: [{ name: { $regex: req.query.search, $options: "i" } },
+            { email: { $regex: req.query.search, $options: "i" } },
+            { interest: { $regex: req.query.search, $options: "i" } },
+        ]
+        }:{}
+        const data = await Alumni.find(keyword);
+        res.status(200).json(data);
+    }catch(err){
+        res.status(500).send({message:"internal server error"});
+    }
+}
 
 module.exports={
     createAlumni,
     getAllAlumni,
+    searchAlumni
 }
